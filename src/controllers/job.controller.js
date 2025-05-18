@@ -1,8 +1,23 @@
-export const jobsController = (req, res) => {
+import * as jobService from "../services/job.service.js";
+
+// Get all jobs
+export const getJobsController = async (req, res) => {
   try {
-    return res.status(200).json({ message: "Hello World from jobs" });
+    const jobs = await jobService.getAllJobs();
+    return res.status(200).json(jobs);
   } catch (error) {
-    console.error("Error in jobsController:", error);
-    return res.status(500).json({ message: "Errors in getting jobs" });
+    console.error("Error in getJobsController:", error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Create a job
+export const createJobController = async (req, res) => {
+  try {
+    const job = await jobService.createJob(req.body);
+    return res.status(201).json(job);
+  } catch (error) {
+    console.error("Error in createJobController:", error);
+    return res.status(500).json({ message: error.message });
   }
 };
