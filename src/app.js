@@ -1,13 +1,19 @@
-const express = require('express');
-const cors = require('cors');
-const testRoutes = require('./routes/test.routes');
+import express from "express";
+import cors from "cors";
+import jobRoute from "./routes/job.route.js";
 
 const app = express();
 
 app.use(cors());
+
 app.use(express.json());
 
-// Mount your test route
-app.use('/api/test', testRoutes);
+// Home route
+app.get("/", (req, res) => {
+  return res.status(200).json({ message: "Hello world from home" });
+});
 
-module.exports = app;
+// Job routes
+app.use("/jobs", jobRoute);
+
+export default app;
