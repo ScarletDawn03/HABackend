@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import jobRoute from "./routes/job.route.js";
+import resumeUploadRoutes from "./routes/resumeUpload.js";
 
 const app = express();
 
@@ -15,5 +16,7 @@ app.get("/", (req, res) => {
 
 // Job routes
 app.use("/jobs", jobRoute);
+
+app.use("/api/resumes", resumeUploadRoutes);
 
 export default app;
