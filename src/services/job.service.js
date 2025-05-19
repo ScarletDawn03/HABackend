@@ -14,11 +14,27 @@ export const getAllJobs = async () => {
 export const createJob = async (jobData) => {
   try {
     const job = new Job(jobData);
-    await job.save();
-    return job;
+    return await job.save();
   } catch (error) {
     console.error("Error creating job:", error);
     throw new Error(`Job creation failed: ${error.message}`);
+  }
+};
+
+export const updateJob = async (id, jobData) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new Error("Invalid job ID format");
+    }
+    const result = await Job.findByIdAndUpdate(
+      { _id: id },
+      { $set: { ...jobData } },
+      { new: true }
+    );
+    return result;
+  } catch (error) {
+    console.error("Error updating job:", error);
+    throw new Error(`Job update failed: ${error.message}`);
   }
 };
 
