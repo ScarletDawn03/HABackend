@@ -23,14 +23,14 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // POST route to upload resume
-router.post('/upload', upload.single('resume'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ message: 'No file uploaded.' });
+router.post('/upload', upload.array('resumes'), (req, res) => {
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ message: 'No files uploaded.' });
   }
 
   res.status(200).json({
-    message: 'Resume uploaded successfully',
-    file: req.file.filename
+    message: 'Resumes uploaded successfully',
+    files: req.files.map(f => f.filename),
   });
 });
 
