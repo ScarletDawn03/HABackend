@@ -10,6 +10,15 @@ export const getAllJobs = async () => {
     throw new Error(`Fetching jobs failed: ${error.message}`);
   }
 };
+export const getJobById = async (id) => {
+  try {
+    const jobs = await Job.findById(id);
+    return jobs;
+  } catch (error) {
+    console.error("Error fetching jobs:", error);
+    throw new Error(`Fetching jobs failed: ${error.message}`);
+  }
+};
 
 export const createJob = async (jobData) => {
   try {
