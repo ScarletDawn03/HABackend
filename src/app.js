@@ -2,6 +2,8 @@ import express from "express";
 import cors from "cors";
 import jobRoute from "./routes/job.route.js";
 import resumeUploadRoutes from "./routes/resumeUpload.js";
+import authRoutes from './routes/auth.route.js';
+
 
 const app = express();
 
@@ -13,6 +15,8 @@ app.use(express.json());
 app.get("/", (req, res) => {
   return res.status(200).json({ message: "Hello world from home" });
 });
+
+app.use('/', authRoutes);
 
 // Job routes
 app.use("/jobs", jobRoute);
