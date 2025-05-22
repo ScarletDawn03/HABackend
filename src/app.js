@@ -3,13 +3,21 @@ import cors from "cors";
 import jobRoute from "./routes/job.route.js";
 import resumeUploadRoutes from "./routes/resumeUpload.js";
 import authRoutes from './routes/auth.route.js';
+import messagesRoute from './routes/messages.route.js';
+import sessionMiddleware from './middleware/session.middleware.js';
+
 
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:5173',  // your frontend origin
+  credentials: true,                // allow credentials (cookies)
+}));
 
 app.use(express.json());
+
+app.use(sessionMiddleware);
 
 // Home route
 app.get("/", (req, res) => {
@@ -22,5 +30,7 @@ app.use('/', authRoutes);
 app.use("/jobs", jobRoute);
 
 app.use("/api/resumes", resumeUploadRoutes);
+
+app.use('/messages', messagesRoute);
 
 export default app;

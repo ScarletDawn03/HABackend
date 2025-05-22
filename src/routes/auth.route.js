@@ -62,6 +62,8 @@ router.get("/auth/google/callback", async (req, res) => {
       { upsert: true, new: true }
     );
 
+    req.session.userEmail = userEmail;
+
     console.log("Saved user:", userEmail);
     res.redirect("http://localhost:5173/home");
 
