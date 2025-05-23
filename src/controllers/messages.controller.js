@@ -1,6 +1,7 @@
-import { syncMessagesForUser } from '../services/gmail.service.js';
+import { syncMessagesForUser, sendEmailViaGmail } from '../services/gmail.service.js';
 import { getDbMessagesByUserEmail,downloadAttachmentForUser } from '../services/message.service.js';
 import User from '../models/User.model.js';
+
 
 
 export async function syncGmailMessages(req, res) {
@@ -61,5 +62,35 @@ export async function getDbMessage(req, res) {
   } catch (error) {
     console.error("Error in getDbMessage controller:", error);
     res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+export async function sendEmail(req, res) {
+  try {
+    const userEmail = req.session?.userEmail;
+    const { receiverEmail, subject, content } = req.body;
+
+    // If using file uploads via multer
+    const attachments = req.files?.map((file) => ({
+      filename: file.originalname,
+      path: file.path,
+    })) || [];
+
+    if (!userEmail || !receiverEmail || !subject || !content) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    const result = await sendEmailViaGmail(
+      userEmail,
+      receiverEmail,
+      subject,
+      content,
+      attachments
+    );
+
+    res.status(200).json({ message: 'Email sent', data: result });
+  } catch (error) {
+    console.error('Error sending email:', error);
+    res.status(500).json({ message: 'Failed to send email', error: error.message });
   }
 }

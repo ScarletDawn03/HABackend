@@ -2,6 +2,11 @@ import { google } from 'googleapis';
 import Message from '../models/message.model.js';
 import User from '../models/User.model.js'; // Make sure you have this
 
+import fs from 'fs/promises';
+import path from 'path';
+import mime from 'mime-types';
+
+
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
@@ -160,5 +165,78 @@ export async function syncMessagesForUser(userEmail, maxResults = 3) {
   }
 
   return { source: 'incremental', messages: detailedMessages };
+}
+
+/**
+ * Send an email using Gmail API with optional attachments
+ * @param {string} senderEmail - The logged-in user's email (used for auth)
+ * @param {string} to - Recipient's email address
+ * @param {string} subject - Subject of the email
+ * @param {string} bodyText - Plain text content
+ * @param {Array<{filename: string, path: string}>} attachments - Optional attachments
+ */
+export async function sendEmailViaGmail(senderEmail, to, subject, bodyText, attachments = []) {
+  const user = await User.findOne({ email: senderEmail });
+  if (!user) throw new Error('Sender not found');
+
+  await setUserCredentials(user);
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+  // Build message body with MIME format
+  const boundary = 'my-boundary-42';
+  const mimeParts = [];
+
+  // Add the plain text part
+  mimeParts.push(
+    `--${boundary}`,
+    `Content-Type: text/plain; charset="UTF-8"`,
+    `Content-Transfer-Encoding: 7bit`,
+    '',
+    bodyText
+  );
+
+  // Add attachments (if any)
+  for (const file of attachments) {
+    const fileContent = await fs.readFile(file.path);
+    const mimeType = mime.lookup(file.filename) || 'application/octet-stream';
+    const base64Content = fileContent.toString('base64');
+
+    mimeParts.push(
+      `--${boundary}`,
+      `Content-Type: ${mimeType}; name="${file.filename}"`,
+      `Content-Disposition: attachment; filename="${file.filename}"`,
+      `Content-Transfer-Encoding: base64`,
+      '',
+      base64Content
+    );
+  }
+
+  mimeParts.push(`--${boundary}--`);
+
+  const rawMessage = [
+    `To: ${to}`,
+    `From: ${senderEmail}`,
+    `Subject: ${subject}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    '',
+    ...mimeParts
+  ].join('\r\n');
+
+  const encodedMessage = Buffer.from(rawMessage)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+  // Send email
+  const res = await gmail.users.messages.send({
+    userId: 'me',
+    requestBody: {
+      raw: encodedMessage,
+    },
+  });
+
+  return res.data;
 }
 
