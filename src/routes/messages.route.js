@@ -1,5 +1,5 @@
 import express from 'express';
-import { downloadAttachment, syncGmailMessages, getDbMessage, sendEmail } from '../controllers/messages.controller.js';
+import { downloadAttachment, syncGmailMessages, getDbMessage, sendEmail, deleteMessageController  } from '../controllers/messages.controller.js';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import multer from 'multer';
 
@@ -12,5 +12,6 @@ router.get('/download-attachment',downloadAttachment);
 router.get('/sync-messages',syncGmailMessages);
 router.get('/db-messages', getDbMessage);
 router.post('/send', upload.array('attachments'), sendEmail);
+router.delete('/delete/:id', deleteMessageController);
 
 export default router;
