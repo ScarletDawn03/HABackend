@@ -14,8 +14,8 @@ export const getApplicantsByJobId = async (jobId) => {
         select: "-syncedMessageIds -accessToken -refreshToken -__v" // Exclude uneccessary fields
       });
 
-    // Map each application to include both user details and status
     const applicants = applications.map(app => ({
+      applicationId: app._id,
       user: app.userId,
       appliedAt: app.appliedAt,
       status: app.status,

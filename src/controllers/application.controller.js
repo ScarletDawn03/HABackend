@@ -10,6 +10,7 @@ export const getApplicantsByJobIdController = async (req, res) => {
     return res.status(200).json({
       success: true,
       count: applicants.length,
+      jobId: jobId,
       applicants,
     });
   } catch (error) {
