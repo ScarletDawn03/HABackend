@@ -65,6 +65,10 @@ export async function syncMessagesForUser(userEmail, maxResults = 3) {
     throw new Error('User not found');
   }
 
+  if (!user.syncedMessageIds) {
+    user.syncedMessageIds = [];
+  }
+
   await setUserCredentials(user);
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
@@ -76,7 +80,10 @@ export async function syncMessagesForUser(userEmail, maxResults = 3) {
       labelIds: ['CATEGORY_PERSONAL'],
     });
 
-    const messages = messagesListRes.data.messages || [];
+    const messages = (messagesListRes.data.messages || []).filter(
+      (msg) => !user.syncedMessageIds.includes(msg.id)
+    );
+
     const historyId = messagesListRes.data.historyId;
 
     const detailedMessages = await Promise.all(
@@ -87,9 +94,9 @@ export async function syncMessagesForUser(userEmail, maxResults = 3) {
           format: 'full',
         });
 
-         if (!msgData.data.labelIds?.includes('CATEGORY_PERSONAL')) {
-      return null;
-    }
+        if (!msgData.data.labelIds?.includes('CATEGORY_PERSONAL')) {
+          return null;
+        }
 
         const { from, subject, body, attachments } = parseMessagePayload(msgData.data.payload);
 
@@ -108,16 +115,17 @@ export async function syncMessagesForUser(userEmail, maxResults = 3) {
           { upsert: true, new: true }
         );
 
+        // Track this message ID as synced
+        user.syncedMessageIds.push(msg.id);
+
         return { messageId: msg.id, threadId: msgData.data.threadId, from, subject, body, attachments };
       })
     );
 
-    const filteredMessages = detailedMessages.filter(Boolean);
-
     user.lastHistoryId = historyId;
     await user.save();
 
-    return { source: 'initial', messages: filteredMessages };
+    return { source: 'initial', messages: detailedMessages.filter(Boolean) };
   }
 
   // Case 2: Incremental sync
@@ -130,8 +138,12 @@ export async function syncMessagesForUser(userEmail, maxResults = 3) {
   const history = historyRes.data.history || [];
   const newMessages = history.flatMap((h) => h.messages || []);
 
+  const messagesToFetch = newMessages.filter(
+    (msg) => !user.syncedMessageIds.includes(msg.id)
+  );
+
   const detailedMessages = await Promise.all(
-    newMessages.map(async (msg) => {
+    messagesToFetch.map(async (msg) => {
       const msgData = await gmail.users.messages.get({
         userId: 'me',
         id: msg.id,
@@ -155,16 +167,20 @@ export async function syncMessagesForUser(userEmail, maxResults = 3) {
         { upsert: true, new: true }
       );
 
+      // Track this message ID as synced
+      user.syncedMessageIds.push(msg.id);
+
       return { messageId: msg.id, threadId: msgData.data.threadId, from, subject, body, attachments };
     })
   );
 
   if (historyRes.data.historyId) {
     user.lastHistoryId = historyRes.data.historyId;
-    await user.save();
   }
 
-  return { source: 'incremental', messages: detailedMessages };
+  await user.save();
+
+  return { source: 'incremental', messages: detailedMessages.filter(Boolean) };
 }
 
 /**

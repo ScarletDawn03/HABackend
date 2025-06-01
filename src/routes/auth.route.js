@@ -52,15 +52,16 @@ router.get("/auth/google/callback", async (req, res) => {
     const userEmail = data.email;
     console.log("User email retrieved:", userEmail);
 
-    await User.findOneAndUpdate(
-      { email: userEmail },
-      {
-        email: userEmail,
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token, // might be undefined if not first time
-      },
-      { upsert: true, new: true }
-    );
+      await User.findOneAndUpdate(
+    { email: userEmail },
+    {
+      email: userEmail,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      $setOnInsert: { syncedMessageIds: [] }
+    },
+    { upsert: true, new: true }
+  );
 
     req.session.userEmail = userEmail;
 
