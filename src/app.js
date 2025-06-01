@@ -4,6 +4,8 @@ import jobRoute from "./routes/job.route.js";
 import resumeUploadRoutes from "./routes/resumeUpload.js";
 import authRoutes from './routes/auth.route.js';
 import messagesRoute from './routes/messages.route.js';
+import scheduleRoute from './routes/schedule.route.js';
+import applicationRoute from './routes/application.route.js';
 import sessionMiddleware from './middleware/session.middleware.js';
 
 
@@ -32,5 +34,9 @@ app.use("/jobs", jobRoute);
 app.use("/api/resumes", resumeUploadRoutes);
 
 app.use('/messages', messagesRoute);
+
+app.use('/applications', applicationRoute);
+
+app.use('/schedules', scheduleRoute);
 
 export default app;
