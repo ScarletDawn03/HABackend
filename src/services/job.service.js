@@ -35,12 +35,16 @@ export const updateJob = async (id, jobData) => {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       throw new Error("Invalid job ID format");
     }
-    const result = await Job.findByIdAndUpdate(
-      { _id: id },
-      { $set: { ...jobData } },
-      { new: true }
-    );
-    return result;
+
+    const job = await Job.findById(id);
+    if (!job) {
+      throw new Error("Job not found");
+    }
+    
+    Object.assign(job, jobData); // Merge new data into the document
+    await job.save();
+
+    return job;
   } catch (error) {
     console.error("Error updating job:", error);
     throw new Error(`Job update failed: ${error.message}`);
