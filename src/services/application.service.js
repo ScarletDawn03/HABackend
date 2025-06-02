@@ -1,4 +1,5 @@
 import Application from "../models/application.model.js";
+import Applicant from "../models/applicant.model.js";
 import mongoose from "mongoose";
 
 export const getApplicantsByJobId = async (jobId) => {
@@ -9,14 +10,11 @@ export const getApplicantsByJobId = async (jobId) => {
 
     // Find applications for the given job and populate only the user details
     const applications = await Application.find({ jobId: jobId })
-      .populate({
-        path: "userId",
-        select: "-syncedMessageIds -accessToken -refreshToken -__v" // Exclude uneccessary fields
-      });
+      .populate("applicantId");
 
     const applicants = applications.map(app => ({
       applicationId: app._id,
-      user: app.userId,
+      applicant: app.applicantId,
       appliedAt: app.appliedAt,
       status: app.status,
     }));
