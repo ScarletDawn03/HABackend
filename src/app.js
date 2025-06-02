@@ -7,6 +7,8 @@ import messagesRoute from './routes/messages.route.js';
 import scheduleRoute from './routes/schedule.route.js';
 import applicationRoute from './routes/application.route.js';
 import sessionMiddleware from './middleware/session.middleware.js';
+import calendarRoutes from './routes/calendar.route.js';
+
 
 
 
@@ -38,5 +40,7 @@ app.use('/messages', messagesRoute);
 app.use('/applications', applicationRoute);
 
 app.use('/schedules', scheduleRoute);
+
+app.use('/calendar', calendarRoutes);
 
 export default app;
