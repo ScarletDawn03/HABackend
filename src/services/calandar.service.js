@@ -37,7 +37,11 @@ export async function createCalendarEvent(userEmail, eventData) {
     description: eventData.description,
     start: { dateTime: normalizeDateTime(eventData.start) },
     end: { dateTime: normalizeDateTime(eventData.end) },
-    attendees: eventData.email ? [{ email: eventData.email }] : [],
+    attendees: Array.isArray(eventData.email)
+      ? eventData.email.map((e) => ({ email: e }))
+      : eventData.email
+        ? [{ email: eventData.email }]
+        : [],
   };
 
   console.log('Event to create:', JSON.stringify(event, null, 2));
@@ -46,7 +50,7 @@ export async function createCalendarEvent(userEmail, eventData) {
     const res = await calendar.events.insert({
       calendarId: 'primary',
       requestBody: event,
-      sendUpdates: 'all', 
+      sendUpdates: 'all',
     });
     return res.data;
   } catch (error) {
@@ -57,7 +61,7 @@ export async function createCalendarEvent(userEmail, eventData) {
 
 
 export async function getUpcomingEvents(userEmail) {
-    const calendar = await setCredentials(userEmail);
+  const calendar = await setCredentials(userEmail);
 
   try {
     const res = await calendar.events.list({
