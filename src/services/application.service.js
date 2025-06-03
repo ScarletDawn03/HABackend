@@ -1,4 +1,5 @@
 import Application from "../models/application.model.js";
+import Job from "../models/job.model.js";
 import Applicant from "../models/applicant.model.js";
 import mongoose from "mongoose";
 
@@ -28,6 +29,18 @@ export const getApplicantsByJobId = async (jobId) => {
 
 export const createApplication = async (applicationData) => {
   try {
+    const { applicantId, jobId } = applicationData;
+
+    const applicantExists = await Applicant.findById(applicantId);
+    if (!applicantExists) {
+      throw new Error("Applicant not found");
+    }
+
+    const jobExists = await Job.findById(jobId);
+    if (!jobExists) {
+      throw new Error("Job not found");
+    }
+
     const application = new Application(applicationData);
     return await application.save();
   } catch (error) {
