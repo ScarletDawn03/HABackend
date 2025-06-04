@@ -9,6 +9,7 @@ import applicationRoute from './routes/application.route.js';
 import sessionMiddleware from './middleware/session.middleware.js';
 import calendarRoutes from './routes/calendar.route.js';
 import verificationRoutes from './routes/verification.route.js';
+import hrRoutes from './routes/hr.route.js';
 
 
 
@@ -47,5 +48,6 @@ app.use('/calendar', calendarRoutes);
 
 app.use('/verification', verificationRoutes);
 
+app.use('/hr', hrRoutes);
 
 export default app;
