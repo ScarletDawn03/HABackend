@@ -183,6 +183,16 @@ export async function syncMessagesForUser(userEmail, maxResults = 3) {
   return { source: 'incremental', messages: detailedMessages.filter(Boolean) };
 }
 
+function getGmailClient(accessToken) {
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+  oauth2Client.setCredentials({ access_token: accessToken });
+  return google.gmail({ version: 'v1', auth: oauth2Client });
+}
+
 /**
  * Send an email using Gmail API with optional attachments
  * @param {string} senderEmail - The logged-in user's email (used for auth)
@@ -192,7 +202,7 @@ export async function syncMessagesForUser(userEmail, maxResults = 3) {
  * @param {Array<{filename: string, path: string}>} attachments - Optional attachments
  */
 export async function sendEmailViaGmail(senderEmail, to, subject, bodyText, attachments = []) {
-  const user = await User.findOne({ email: senderEmail });
+  const user = await User.findOne({ email: senderEmail});
   if (!user) throw new Error('Sender not found');
 
   await setUserCredentials(user);
@@ -255,4 +265,53 @@ export async function sendEmailViaGmail(senderEmail, to, subject, bodyText, atta
 
   return res.data;
 }
+
+
+export async function sendVerificationEmailViaGmail({
+  accessToken,
+  senderEmail,
+  candidateEmail,
+  candidateName,
+  jobTitle,
+  link,
+}) {
+  const bodyText = `
+Hello ${candidateName},
+
+Please verify your interest for the job "${jobTitle}" by completing this short form:
+${link}
+
+This link will expire in 48 hours.
+`;
+
+  const subject = `Verification Required: ${jobTitle}`;
+
+  const messageParts = [
+    `To: ${candidateEmail}`,
+    `From: ${senderEmail}`,
+    `Subject: ${subject}`,
+    `Content-Type: text/plain; charset=utf-8`,
+    '',
+    bodyText,
+  ];
+
+  const rawMessage = messageParts.join('\n');
+
+  const encodedMessage = Buffer.from(rawMessage)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+  const gmail = getGmailClient(accessToken);
+
+  await gmail.users.messages.send({
+    userId: 'me',
+    requestBody: {
+      raw: encodedMessage,
+    },
+  });
+}
+
+
 
