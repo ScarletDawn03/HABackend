@@ -5,38 +5,59 @@ import Applicant from '../models/applicant.model.js';
 import Application from '../models/application.model.js'; // For status update
 import User from '../models/User.model.js';
 
-
+//place json here
 export async function startVerification(req, res) {
   try {
     const hrEmail = req.session?.userEmail;
     if (!hrEmail) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { candidateId, jobId } = req.body;
-    if (!candidateId || !jobId) return res.status(400).json({ error: 'Missing candidate or job ID' });
-
-    const candidate = await Applicant.findById(candidateId);
-    if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
+    const { jobID, applicants } = req.body;
+    if (!jobID || !Array.isArray(applicants)) {
+      return res.status(400).json({ error: 'Missing job ID or applicants array' });
+    }
 
     const user = await User.findOne({ email: hrEmail });
-    if (!user || !user.accessToken) return res.status(403).json({ error: 'Gmail access token missing' });
+    if (!user || !user.accessToken) {
+      return res.status(403).json({ error: 'Gmail access token missing' });
+    }
 
-    const token = await createVerificationToken({ candidateId, jobId });
     const frontendBaseUrl = process.env.FRONTEND_BASE_URL || 'http://localhost:5173';
-    const verificationLink = `${frontendBaseUrl}/verify-captcha?token=${token}`;
+    const results = [];
 
-    await sendVerificationEmailViaGmail({
-      accessToken: user.accessToken,
-      senderEmail: hrEmail,
-      candidateEmail: candidate.email,
-      candidateName: candidate.name,
-      jobTitle: 'the position you applied for', // You can dynamically fetch job title here
-      link: verificationLink,
+    for (const candidateId of applicants) {
+      try {
+        const candidate = await Applicant.findById(candidateId);
+        if (!candidate) {
+          results.push({ candidateId, success: false, error: 'Candidate not found' });
+          continue;
+        }
+
+        const token = await createVerificationToken({ candidateId, jobId: jobID });
+        const verificationLink = `${frontendBaseUrl}/verify-captcha?token=${token}`;
+
+        await sendVerificationEmailViaGmail({
+          accessToken: user.accessToken,
+          senderEmail: hrEmail,
+          candidateEmail: candidate.email,
+          candidateName: candidate.name,
+          jobTitle: 'the position you applied for',
+          link: verificationLink,
+        });
+
+        results.push({ candidateId, success: true });
+      } catch (err) {
+        console.error(`Error sending verification to candidate ${candidateId}:`, err);
+        results.push({ candidateId, success: false, error: 'Email send failed' });
+      }
+    }
+
+    return res.status(200).json({
+      message: 'Verification process completed',
+      results,
     });
-
-    res.status(200).json({ message: 'Verification email sent successfully' });
   } catch (err) {
     console.error('Error in startVerification:', err);
-    res.status(500).json({ error: 'Failed to send verification email' });
+    res.status(500).json({ error: 'Server error' });
   }
 }
 export async function getVerificationByTokenController(req, res) {
