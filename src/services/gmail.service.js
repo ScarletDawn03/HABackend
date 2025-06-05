@@ -202,17 +202,16 @@ function getGmailClient(accessToken) {
  * @param {Array<{filename: string, path: string}>} attachments - Optional attachments
  */
 export async function sendEmailViaGmail(senderEmail, to, subject, bodyText, attachments = []) {
-  const user = await User.findOne({ email: senderEmail});
+  const user = await User.findOne({ email: senderEmail });
   if (!user) throw new Error('Sender not found');
 
   await setUserCredentials(user);
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
-  // Build message body with MIME format
   const boundary = 'my-boundary-42';
   const mimeParts = [];
 
-  // Add the plain text part
+  // Add plain text body part
   mimeParts.push(
     `--${boundary}`,
     `Content-Type: text/plain; charset="UTF-8"`,
@@ -221,16 +220,34 @@ export async function sendEmailViaGmail(senderEmail, to, subject, bodyText, atta
     bodyText
   );
 
-  // Add attachments (if any)
   for (const file of attachments) {
-    const fileContent = await fs.readFile(file.path);
-    const mimeType = mime.lookup(file.filename) || 'application/octet-stream';
+    console.log('Processing attachment:', file);
+
+    let fileContent;
+    if (file.buffer) {
+      fileContent = file.buffer;
+    } else if (file.path) {
+      try {
+        // Resolve the path to absolute path
+        const resolvedPath = path.resolve(file.path);
+        console.log('Resolved attachment path:', resolvedPath);
+        fileContent = await fs.readFile(resolvedPath);
+      } catch (err) {
+        console.error('Error reading attachment file:', err);
+        throw new Error(`Attachment file content missing or unreadable for ${file.filename || file.originalname}`);
+      }
+    } else {
+      throw new Error(`No file content found for attachment: ${file.filename || file.originalname}`);
+    }
+
+    const filename = file.originalname || file.filename || 'unknown';
+    const mimeType = mime.lookup(filename) || 'application/octet-stream';
     const base64Content = fileContent.toString('base64');
 
     mimeParts.push(
       `--${boundary}`,
-      `Content-Type: ${mimeType}; name="${file.filename}"`,
-      `Content-Disposition: attachment; filename="${file.filename}"`,
+      `Content-Type: ${mimeType}; name="${filename}"`,
+      `Content-Disposition: attachment; filename="${filename}"`,
       `Content-Transfer-Encoding: base64`,
       '',
       base64Content
@@ -246,7 +263,7 @@ export async function sendEmailViaGmail(senderEmail, to, subject, bodyText, atta
     `MIME-Version: 1.0`,
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
     '',
-    ...mimeParts
+    ...mimeParts,
   ].join('\r\n');
 
   const encodedMessage = Buffer.from(rawMessage)
@@ -255,16 +272,115 @@ export async function sendEmailViaGmail(senderEmail, to, subject, bodyText, atta
     .replace(/\//g, '_')
     .replace(/=+$/, '');
 
-  // Send email
   const res = await gmail.users.messages.send({
     userId: 'me',
-    requestBody: {
-      raw: encodedMessage,
-    },
+    requestBody: { raw: encodedMessage },
   });
 
   return res.data;
 }
+
+
+/**
+ * Reply to an email in the same thread, with optional attachments.
+ * @param {Object} options
+ * @param {string} options.senderEmail - The logged-in user's email.
+ * @param {string} options.recipientEmail - The recipient's email.
+ * @param {string} options.subject - Email subject (e.g. "Re: ...").
+ * @param {string} options.bodyText - The plain text message.
+ * @param {string} options.replyToMessageId - Original Gmail messageId.
+ * @param {string} options.threadId - Gmail threadId to continue.
+ * @param {Array<{ filename: string, path: string }>} attachments - Multer-parsed attachments (optional).
+ */
+export async function replyToEmailViaGmail({
+  senderEmail,
+  recipientEmail,
+  subject,
+  bodyText,
+  replyToMessageId,
+  threadId,
+  attachments = [],
+}) {
+  const user = await User.findOne({ email: senderEmail });
+  if (!user) throw new Error('Sender not found');
+
+  await setUserCredentials(user);
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+  // Get original message's Message-ID header
+  const originalMessageIdHeader = await getMessageIdHeader(gmail, replyToMessageId);
+  if (!originalMessageIdHeader) {
+    throw new Error('Original message Message-ID header not found');
+  }
+
+  const boundary = 'reply-boundary-42';
+  const mimeParts = [];
+
+  // Plain text message part
+  mimeParts.push(
+    `--${boundary}`,
+    `Content-Type: text/plain; charset="UTF-8"`,
+    `Content-Transfer-Encoding: 7bit`,
+    '',
+    bodyText
+  );
+
+  for (const file of attachments) {
+    // Use buffer if available, else read from disk path
+    const fileContent = file.buffer || (file.path ? await fs.readFile(file.path) : null);
+    if (!fileContent) {
+      throw new Error(`Attachment file content missing for ${file.originalname || file.filename}`);
+    }
+
+    const filename = file.originalname || file.filename;
+    const mimeType = mime.lookup(filename) || 'application/octet-stream';
+    const base64Content = fileContent.toString('base64');
+
+    mimeParts.push(
+      `--${boundary}`,
+      `Content-Type: ${mimeType}; name="${filename}"`,
+      `Content-Disposition: attachment; filename="${filename}"`,
+      `Content-Transfer-Encoding: base64`,
+      '',
+      base64Content
+    );
+  }
+
+  mimeParts.push(`--${boundary}--`);
+
+  const rawMessage = [
+    `To: ${recipientEmail}`,
+    `From: ${senderEmail}`,
+    `Subject: ${subject}`,
+    `In-Reply-To: ${originalMessageIdHeader}`,
+    `References: ${originalMessageIdHeader}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    '',
+    ...mimeParts,
+  ].join('\r\n');
+
+  const encodedMessage = Buffer.from(rawMessage)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+  const res = await gmail.users.messages.send({
+    userId: 'me',
+    requestBody: {
+      raw: encodedMessage,
+      threadId,
+    },
+  });
+
+  console.log("Reply sent. Gmail API response threadId:", res.data.threadId);
+
+  return res.data;
+}
+
+
+
 
 
 export async function sendVerificationEmailViaGmail({
@@ -278,7 +394,7 @@ export async function sendVerificationEmailViaGmail({
   const bodyText = `
 Hello ${candidateName},
 
-Please verify your interest for the job "${jobTitle}" by completing this short form:
+Please verify your interest for the job ${jobTitle} by completing this short form:
 ${link}
 
 This link will expire in 48 hours.
@@ -312,6 +428,20 @@ This link will expire in 48 hours.
     },
   });
 }
+
+
+async function getMessageIdHeader(gmail, messageId) {
+  const msg = await gmail.users.messages.get({
+    userId: 'me',
+    id: messageId,
+    format: 'metadata',
+    metadataHeaders: ['Message-ID'],
+  });
+  const headers = msg.data.payload.headers;
+  const messageIdHeader = headers.find(h => h.name.toLowerCase() === 'message-id');
+  return messageIdHeader ? messageIdHeader.value : null;
+}
+
 
 
 

@@ -1,4 +1,4 @@
-import { syncMessagesForUser, sendEmailViaGmail } from '../services/gmail.service.js';
+import { syncMessagesForUser, sendEmailViaGmail, replyToEmailViaGmail } from '../services/gmail.service.js';
 import { getDbMessagesByUserEmail,downloadAttachmentForUser, deleteMessageById  } from '../services/message.service.js';
 import User from '../models/User.model.js';
 import Message from '../models/message.model.js';
@@ -72,11 +72,15 @@ export async function sendEmail(req, res) {
     const userEmail = req.session?.userEmail;
     const { receiverEmail, subject, content } = req.body;
 
-    // If using file uploads via multer
+    // Multer puts uploaded files info in req.files (array)
+    // Make sure multer is configured to save files on disk (e.g., dest: 'uploads/')
     const attachments = req.files?.map((file) => ({
       filename: file.originalname,
       path: file.path,
+      buffer: file.buffer,  // just in case buffer is available (if you use memoryStorage)
     })) || [];
+
+    console.log('Attachments received in controller:', attachments);
 
     if (!userEmail || !receiverEmail || !subject || !content) {
       return res.status(400).json({ message: 'Missing required fields' });
@@ -98,10 +102,63 @@ export async function sendEmail(req, res) {
 }
 
 
+export async function replyToEmail(req, res) {
+  try {
+    console.log("Incoming /messages/reply-to request");
+    console.log("Request body:", req.body);
+    console.log("Attachments:", req.files);
+
+    const { originalMessageId, bodyText, to, subject, replyToMessageId, threadId } = req.body;
+    const senderEmail = req.session.userEmail;
+
+    if (!senderEmail) {
+      return res.status(401).json({ error: 'Unauthorized: No logged-in user' });
+    }
+
+    if (!originalMessageId || !to || !subject || !bodyText || !replyToMessageId || !threadId) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const originalMsg = await Message.findOne({
+      accountEmail: senderEmail,
+      messageId: originalMessageId,
+    });
+
+    if (!originalMsg) {
+      return res.status(404).json({ error: 'Original message not found' });
+    }
+
+    const finalSubject = originalMsg.subject.startsWith('Re:')
+      ? originalMsg.subject
+      : `Re: ${originalMsg.subject}`;
+
+    await replyToEmailViaGmail({
+      senderEmail,   // from session
+      recipientEmail: to,
+      subject: finalSubject,
+      bodyText,
+      replyToMessageId,
+      threadId,
+      attachments: req.files, // multer array
+    });
+
+    res.status(200).json({ success: true, message: 'Reply sent successfully' });
+  } catch (err) {
+    console.error("Error in replyToEmail:", err);
+    res.status(500).json({ error: 'Failed to send reply' });
+  }
+}
+
+
+
 /**
  * DELETE /api/messages/:id?byMessageId=true
  */
 export async function deleteMessageController(req, res) {
+
+    console.log("Incoming reply email:");
+    console.log("Body:", req.body);
+    console.log("Attachments:", req.files);
   const { id } = req.params;
   const { byMessageId } = req.query;
   const userEmail = req.session?.userEmail;
