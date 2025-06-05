@@ -40,3 +40,24 @@ export const createApplicationController = async (req, res) => {
     });
   }
 };
+
+
+export const updateApplicationStatusController = async (req, res) => {
+  const { applicantId, jobId } = req.params;
+  const { status } = req.body;
+
+  try {
+    const updatedApplication = await applicationService.updateApplicationStatus(applicantId, jobId, status);
+
+    return res.status(200).json({
+      success: true,
+      message: "Application status updated successfully",
+      data: updatedApplication,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};

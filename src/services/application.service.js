@@ -48,3 +48,31 @@ export const createApplication = async (applicationData) => {
     throw new Error(`Application creation failed: ${error.message}`);
   }
 };
+
+export const updateApplicationStatus = async (applicantId, jobId, status) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(applicantId) || !mongoose.Types.ObjectId.isValid(jobId)) {
+      throw new Error("Invalid applicant ID or job ID format");
+    }
+
+    const validStatuses = ["verified", "screened", "interview scheduled", "applied"];
+    if (!validStatuses.includes(status)) {
+      throw new Error(`Invalid status. Allowed statuses are: ${validStatuses.join(", ")}`);
+    }
+
+    const updatedApplication = await Application.findOneAndUpdate(
+      { applicantId, jobId },
+      { status, updatedAt: new Date() },
+      { new: true }
+    );
+
+    if (!updatedApplication) {
+      throw new Error("Application not found for the given applicant and job");
+    }
+
+    return updatedApplication;
+  } catch (error) {
+    console.error("Error updating application status:", error);
+    throw new Error(`Updating application status failed: ${error.message}`);
+  }
+};
