@@ -2,7 +2,7 @@ import { syncMessagesForUser, sendEmailViaGmail, replyToEmailViaGmail } from '..
 import { getDbMessagesByUserEmail,downloadAttachmentForUser, deleteMessageById  } from '../services/message.service.js';
 import User from '../models/User.model.js';
 import Message from '../models/message.model.js';
-
+import mongoose from 'mongoose';
 
 
 
@@ -150,43 +150,49 @@ export async function replyToEmail(req, res) {
 }
 
 
-
 /**
- * DELETE /api/messages/:id?byMessageId=true
+ * DELETE /messages/:id?byThreadId=true
  */
 export async function deleteMessageController(req, res) {
-
-    console.log("Incoming reply email:");
-    console.log("Body:", req.body);
-    console.log("Attachments:", req.files);
   const { id } = req.params;
-  const { byMessageId } = req.query;
+  const { byThreadId } = req.query;
   const userEmail = req.session?.userEmail;
 
   if (!userEmail) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
+  const isThreadDelete = byThreadId === "true";
+
   try {
-    // Step 1: Ensure the message exists and belongs to the user
-    const filter = byMessageId === 'true'
-      ? { messageId: id, accountEmail: userEmail }
+    // Validate ObjectId if deleting by message _id
+    if (!isThreadDelete && !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid message ID format" });
+    }
+
+    // Step 1: Check existence and ownership
+    const filter = isThreadDelete
+      ? { threadId: id, accountEmail: userEmail }
       : { _id: id, accountEmail: userEmail };
 
     const message = await Message.findOne(filter);
     if (!message) {
-      return res.status(404).json({ error: 'Message not found or unauthorized' });
+      return res
+        .status(404)
+        .json({ error: "Message(s) not found or unauthorized" });
     }
 
-    // Step 2: Delete the message
-    const deleted = await deleteMessageById(id, byMessageId === 'true');
-    if (!deleted) {
-      return res.status(500).json({ error: 'Failed to delete message' });
+    // Step 2: Delete message(s) - pass userEmail!
+    const deletedCount = await deleteMessageById(id, isThreadDelete, userEmail);
+    if (deletedCount === 0) {
+      return res.status(500).json({ error: "No messages were deleted" });
     }
 
-    return res.status(200).json({ message: 'Message deleted successfully' });
+    return res
+      .status(200)
+      .json({ message: `Deleted ${deletedCount} message(s) successfully.` });
   } catch (error) {
-    console.error('Error deleting message:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error("Error deleting message(s):", error);
+    return res.status(500).json({ error: "Internal server error" });
   }
 }
