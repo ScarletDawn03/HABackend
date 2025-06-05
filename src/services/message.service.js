@@ -53,14 +53,31 @@ export async function downloadAttachmentForUser(user, messageId, attachmentId) {
   return Buffer.from(attachment.data.data, 'base64');
 }
 
+
 /**
- * Delete a message from the database.
- * @param {string} id - The MongoDB _id or Gmail messageId.
- * @param {boolean} useMessageId - If true, use Gmail messageId instead of MongoDB _id.
- * @returns {boolean} - True if deleted, false if not found.
+ * Deletes a message or a thread of messages.
+ * @param {string} id - Either the message _id or threadId.
+ * @param {boolean} isThread - If true, treat `id` as threadId; otherwise as _id.
+ * @param {string} userEmail - The email of the user making the request.
+ * @returns {Promise<number>} - Number of deleted documents.
  */
-export async function deleteMessageById(id, useMessageId = false) {
-  const filter = useMessageId ? { messageId: id } : { _id: id };
-  const result = await Message.deleteOne(filter);
-  return result.deletedCount > 0;
+export async function deleteMessageById(id, isThread = false, userEmail) {
+  try {
+    if (isThread) {
+      const result = await Message.deleteMany({
+        threadId: id,
+        accountEmail: userEmail,
+      });
+      return result.deletedCount;
+    } else {
+      const result = await Message.deleteOne({
+        _id: id,
+        accountEmail: userEmail,
+      });
+      return result.deletedCount;
+    }
+  } catch (err) {
+    console.error("Error deleting message(s) in service:", err);
+    throw err;
+  }
 }
