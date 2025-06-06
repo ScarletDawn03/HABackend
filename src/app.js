@@ -52,6 +52,7 @@ app.use("/hr", hrRoutes);
 
 app.use("/resume-filters", resumeFilterRoutes);
 
-app.use("/openai", openAIRoute);
+// Testing purpose
+// app.use("/openai", openAIRoute);
 
 export default app;

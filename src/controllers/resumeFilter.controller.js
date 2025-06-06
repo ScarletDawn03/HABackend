@@ -1,4 +1,5 @@
 import * as resumeFilterService from "../services/resumeFilter.service.js";
+import { getFormattedResumeFilter } from "../utils/resumeFilter.util.js";
 
 // Get Resume Filter by jobId
 export const getResumeFilterByJobIdController = async (req, res) => {
@@ -9,12 +10,10 @@ export const getResumeFilterByJobIdController = async (req, res) => {
       jobId
     );
     if (!resumeFilter) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: "Resume filter not found for jobId " + jobId,
-        });
+      return res.status(404).json({
+        success: false,
+        message: "Resume filter not found for jobId " + jobId,
+      });
     }
     return res.status(200).json({ success: true, data: resumeFilter });
   } catch (error) {
@@ -39,6 +38,27 @@ export const upsertResumeFilterController = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in upsertResumeFilterController:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+//　Refine resume filter
+export const refineResumeFilterController = async (req, res) => {
+  const { conditions } = req.body;
+
+  try {
+    const refinedFilter = await resumeFilterService.refineResumeFilter(
+      getFormattedResumeFilter(conditions)
+    );
+    return res.status(200).json({
+      success: true,
+      data: refinedFilter,
+    });
+  } catch (error) {
+    console.error("Error in refineResumeFilterController:", error);
     return res.status(500).json({
       success: false,
       message: error.message,
