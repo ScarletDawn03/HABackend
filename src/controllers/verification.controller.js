@@ -2,8 +2,9 @@
 import { createVerificationToken, getVerificationByToken,  verifyRecaptchaToken  } from '../services/verification.service.js';
 import { sendVerificationEmailViaGmail } from '../services/gmail.service.js';
 import Applicant from '../models/applicant.model.js';
-import Application from '../models/application.model.js'; // For status update
-import User from '../models/User.model.js';
+import Application from '../models/application.model.js';
+import User from '../models/user.model.js';
+import Job from '../models/job.model.js';
 
 export async function startVerification(req, res) {
   try {
@@ -18,6 +19,11 @@ export async function startVerification(req, res) {
     const user = await User.findOne({ email: hrEmail });
     if (!user || !user.accessToken) {
       return res.status(403).json({ error: 'Gmail access token missing' });
+    }
+
+    const job = await Job.findById(jobID);
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
     }
 
     const frontendBaseUrl = process.env.FRONTEND_BASE_URL || 'http://localhost:5173';
@@ -39,7 +45,7 @@ export async function startVerification(req, res) {
           senderEmail: hrEmail,
           candidateEmail: candidate.email,
           candidateName: candidate.name,
-          jobTitle: 'the position you applied for',
+          jobTitle: job.title, 
           link: verificationLink,
         });
 
@@ -59,6 +65,7 @@ export async function startVerification(req, res) {
     res.status(500).json({ error: 'Server error' });
   }
 }
+
 export async function getVerificationByTokenController(req, res) {
   const { token } = req.params;
   try {

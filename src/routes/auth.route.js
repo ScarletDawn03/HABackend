@@ -2,7 +2,7 @@
 import express from 'express';
 import { google } from 'googleapis';
 import dotenv from 'dotenv';
-import User from '../models/User.model.js'; 
+import User from '../models/user.model.js'; 
 dotenv.config();
 
 const router = express.Router();
@@ -13,7 +13,6 @@ const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_REDIRECT_URI
 );
 
-// Scopes: Gmail + email address
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.send',

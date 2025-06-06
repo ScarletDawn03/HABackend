@@ -1,12 +1,12 @@
-// models/User.model.js
+// models/user.model.js
 import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   refreshToken: { type: String },
-  accessToken: { type: String }, // optional
-  lastHistoryId: { type: String }, // for incremental sync
-  syncedMessageIds: { type: [String], default: [] }, // NEW: Track all previously pulled Gmail message IDs
+  accessToken: { type: String }, 
+  lastHistoryId: { type: String }, 
+  syncedMessageIds: { type: [String], default: [] }, 
   availableInterviewDates: [
     {
       start: { type: Date, required: true },

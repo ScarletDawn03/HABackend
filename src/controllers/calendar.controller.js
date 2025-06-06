@@ -1,5 +1,5 @@
 // src/controllers/calendar.controller.js
-import User from '../models/User.model.js';  // import your User model
+import User from '../models/user.model.js'; 
 import { createCalendarEvent, getUpcomingEvents } from '../services/calandar.service.js';
 
 export async function createEvent(req, res) {

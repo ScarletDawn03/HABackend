@@ -53,14 +53,6 @@ export async function downloadAttachmentForUser(user, messageId, attachmentId) {
   return Buffer.from(attachment.data.data, 'base64');
 }
 
-
-/**
- * Deletes a message or a thread of messages.
- * @param {string} id - Either the message _id or threadId.
- * @param {boolean} isThread - If true, treat `id` as threadId; otherwise as _id.
- * @param {string} userEmail - The email of the user making the request.
- * @returns {Promise<number>} - Number of deleted documents.
- */
 export async function deleteMessageById(id, isThread = false, userEmail) {
   try {
     if (isThread) {

@@ -5,7 +5,7 @@ import multer from 'multer';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
-// Use the Google auth middleware for all routes here
+
 router.use(requireAuth);  
 
 router.get('/download-attachment',downloadAttachment);
@@ -15,8 +15,5 @@ router.get('/db-messages', getDbMessage);
 router.post('/send', upload.array('attachments'), sendEmail);
 router.post('/reply-to', upload.array('attachments'), replyToEmail);
 router.delete('/delete/:id', deleteMessageController);
-
-
-
 
 export default router;

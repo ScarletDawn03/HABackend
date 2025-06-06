@@ -25,7 +25,7 @@ export async function markVerified(token) {
   const verification = await Verification.findOne({ token });
   if (!verification) return null;
 
-  await Verification.deleteOne({ token }); // Optional: delete after use
+  await Verification.deleteOne({ token }); 
   return verification;
 }
 

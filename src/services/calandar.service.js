@@ -1,6 +1,6 @@
 // src/services/calendar.service.js
 import { google } from 'googleapis';
-import User from '../models/User.model.js';
+import User from '../models/user.model.js';
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -84,7 +84,7 @@ export async function getUpcomingEvents(userEmail) {
       })) || [],
     }));
 
-    console.log(`📥 Events fetched for ${userEmail}:`, events.length);
+    console.log(`Events fetched for ${userEmail}:`, events.length);
     return events;
   } catch (err) {
     console.error('Get events error:', err.response?.data || err.message);
