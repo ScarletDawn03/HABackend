@@ -83,25 +83,43 @@ export async function getDbMessage(req, res) {
 export async function sendEmail(req, res) {
   try {
     const userEmail = req.session?.userEmail;
-    const { receiverEmail, subject, content } = req.body;
+    let { receiverEmail, subject, content } = req.body;
 
-    // Multer puts uploaded files info in req.files (array)
-    // Make sure multer is configured to save files on disk (e.g., dest: 'uploads/')
+    // Parse receiverEmail if it's a JSON string (e.g., from FormData)
+    try {
+      if (typeof receiverEmail === 'string') {
+        receiverEmail = JSON.parse(receiverEmail);
+      }
+    } catch (e) {
+      return res.status(400).json({ message: 'Invalid receiverEmail format' });
+    }
+
+    // Ensure it's an array
+    if (!Array.isArray(receiverEmail)) {
+      return res.status(400).json({ message: 'receiverEmail must be an array of email addresses' });
+    }
+
+    // Validate emails
+    const validEmails = receiverEmail.filter(email =>
+      typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    );
+    if (validEmails.length === 0) {
+      return res.status(400).json({ message: 'No valid email addresses provided' });
+    }
+
+    // Handle attachments
     const attachments = req.files?.map((file) => ({
       filename: file.originalname,
       path: file.path,
-      buffer: file.buffer,  // just in case buffer is available (if you use memoryStorage)
+      buffer: file.buffer,
     })) || [];
 
-    console.log('Attachments received in controller:', attachments);
-
-    if (!userEmail || !receiverEmail || !subject || !content) {
-      return res.status(400).json({ message: 'Missing required fields' });
-    }
+    console.log('Sending to:', validEmails);
+    console.log('Attachments:', attachments.map(f => f.filename));
 
     const result = await sendEmailViaGmail(
       userEmail,
-      receiverEmail,
+      validEmails,
       subject,
       content,
       attachments
@@ -113,6 +131,7 @@ export async function sendEmail(req, res) {
     res.status(500).json({ message: 'Failed to send email', error: error.message });
   }
 }
+
 
 
 export async function replyToEmail(req, res) {

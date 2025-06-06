@@ -323,7 +323,9 @@ export async function syncSentMessagesForUser(userEmail, maxResults = 3) {
   return { source: 'incremental', messages: detailedMessages.filter(Boolean) };
 }
 
-
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
 
 
 export async function sendEmailViaGmail(senderEmail, to, subject, bodyText, attachments = []) {
@@ -336,6 +338,11 @@ export async function sendEmailViaGmail(senderEmail, to, subject, bodyText, atta
 
   const boundary = "my-boundary-42";
   const mimeParts = [];
+
+  const recipients = Array.isArray(to) ? to : [to];
+for (const email of recipients) {
+  if (!isValidEmail(email)) throw new Error(`Invalid recipient email: ${email}`);
+}
 
   // Format email body with your template
   const formattedBody = `
@@ -397,7 +404,7 @@ HR Team
 
   // Build the raw message string
   const rawMessage = [
-    `To: ${to}`,
+    `To: ${Array.isArray(to) ? to.join(", ") : to}`,
     `From: ${senderEmail}`,
     `Subject: ${subject}`,
     `MIME-Version: 1.0`,
