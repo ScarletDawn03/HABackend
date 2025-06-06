@@ -1,4 +1,4 @@
-import { syncMessagesForUser, sendEmailViaGmail, replyToEmailViaGmail } from '../services/gmail.service.js';
+import { syncMessagesForUser, sendEmailViaGmail, replyToEmailViaGmail, syncSentMessagesForUser } from '../services/gmail.service.js';
 import { getDbMessagesByUserEmail,downloadAttachmentForUser, deleteMessageById  } from '../services/message.service.js';
 import User from '../models/User.model.js';
 import Message from '../models/message.model.js';
@@ -17,6 +17,21 @@ export async function syncGmailMessages(req, res) {
     res.json(result);
   } catch (error) {
     console.error('Error in syncGmailMessages:', error);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+export async function syncGmailSentMessages(req, res) {
+  try {
+    const userEmail = req.session?.userEmail;
+    if (!userEmail) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const result = await syncSentMessagesForUser(userEmail);
+    res.json(result);
+  } catch (error) {
+    console.error('Error in syncGmailSentMessages:', error);
     res.status(500).json({ error: error.message });
   }
 }
@@ -48,8 +63,6 @@ export async function downloadAttachment(req, res) {
     res.status(500).json({ error: "Failed to download attachment" });
   }
 }
-
-
 
 
 export async function getDbMessage(req, res) {

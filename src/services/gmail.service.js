@@ -1,6 +1,8 @@
 import { google } from 'googleapis';
 import Message from '../models/message.model.js';
 import User from '../models/User.model.js'; // Make sure you have this
+import RepliedMessage from '../models/repliedMessage.model.js';
+
 
 import fs from 'fs/promises';
 import path from 'path';
@@ -12,6 +14,18 @@ const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_SECRET,
   process.env.GOOGLE_REDIRECT_URI
 );
+
+
+function getGmailClient(accessToken) {
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+  oauth2Client.setCredentials({ access_token: accessToken });
+  return google.gmail({ version: 'v1', auth: oauth2Client });
+}
+
 
 async function setUserCredentials(user) {
   oauth2Client.setCredentials({
@@ -26,12 +40,22 @@ async function setUserCredentials(user) {
   });
 }
 
-function parseMessagePayload(payload) {
+function parseMessagePayload(payload, options = { includeTo: false }) {
   const headers = payload.headers || [];
   const getHeader = (name) =>
     headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value;
+
   const from = getHeader('From');
   const subject = getHeader('Subject');
+
+  let to = null;
+  if (options.includeTo) {
+    const rawTo = getHeader('To') || '';
+    to = rawTo
+      .split(',')
+      .map((email) => email.trim())
+      .filter(Boolean); // Always returns an array or empty
+  }
 
   let body = '';
   const parts = payload.parts || [payload];
@@ -53,8 +77,11 @@ function parseMessagePayload(payload) {
     }
   }
 
-  return { from, subject, body, attachments };
+  const base = { from, subject, body, attachments };
+  return options.includeTo ? { ...base, to } : base;
 }
+
+
 export async function syncMessagesForUser(userEmail, maxResults = 3) {
   if (!userEmail) {
     throw new Error('Unauthorized - No userEmail provided');
@@ -183,115 +210,235 @@ export async function syncMessagesForUser(userEmail, maxResults = 3) {
   return { source: 'incremental', messages: detailedMessages.filter(Boolean) };
 }
 
-function getGmailClient(accessToken) {
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
-  );
-  oauth2Client.setCredentials({ access_token: accessToken });
-  return google.gmail({ version: 'v1', auth: oauth2Client });
-}
+export async function syncSentMessagesForUser(userEmail, maxResults = 3) {
+  if (!userEmail) throw new Error('Unauthorized - No userEmail provided');
 
-/**
- * Send an email using Gmail API with optional attachments
- * @param {string} senderEmail - The logged-in user's email (used for auth)
- * @param {string} to - Recipient's email address
- * @param {string} subject - Subject of the email
- * @param {string} bodyText - Plain text content
- * @param {Array<{filename: string, path: string}>} attachments - Optional attachments
- */
-export async function sendEmailViaGmail(senderEmail, to, subject, bodyText, attachments = []) {
-  const user = await User.findOne({ email: senderEmail });
-  if (!user) throw new Error('Sender not found');
+  const user = await User.findOne({ email: userEmail });
+  if (!user) throw new Error('User not found');
+
+  if (!user.syncedSentMessageIds) user.syncedSentMessageIds = [];
 
   await setUserCredentials(user);
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
-  const boundary = 'my-boundary-42';
+  const saveRepliedMessage = async (msgId, msgData) => {
+   const { from, to, subject, body, attachments } = parseMessagePayload(msgData.data.payload, { includeTo: true });
+
+  const recipientEmails = Array.isArray(to) ? to : [to].filter(Boolean);
+
+
+    await RepliedMessage.findOneAndUpdate(
+      { accountEmail: userEmail, messageId: msgId },
+      {
+        accountEmail: userEmail,
+        from,
+        recipientEmails,
+        subject,
+        body: body || msgData.data.snippet,
+        threadId: msgData.data.threadId,
+        messageId: msgId,
+        attachments,
+        sentAt: new Date(Number(msgData.data.internalDate) || Date.now()),
+      },
+      { upsert: true, new: true }
+    );
+
+    user.syncedSentMessageIds.push(msgId);
+
+    return {
+      messageId: msgId,
+      threadId: msgData.data.threadId,
+      from,
+      recipientEmails,
+      subject,
+      body,
+      attachments,
+    };
+  };
+
+  // Initial sync
+  if (!user.lastSentHistoryId) {
+    const messagesListRes = await gmail.users.messages.list({
+      userId: 'me',
+      maxResults,
+      labelIds: ['SENT'],
+    });
+
+    const messages = (messagesListRes.data.messages || []).filter(
+      (msg) => !user.syncedSentMessageIds.includes(msg.id)
+    );
+
+    const historyId = messagesListRes.data.historyId;
+
+    const detailedMessages = await Promise.all(
+      messages.map(async (msg) => {
+        const msgData = await gmail.users.messages.get({
+          userId: 'me',
+          id: msg.id,
+          format: 'full',
+        });
+
+        if (!msgData.data.labelIds?.includes('SENT')) return null;
+        return await saveRepliedMessage(msg.id, msgData);
+      })
+    );
+
+    user.lastSentHistoryId = historyId;
+    await user.save();
+
+    return { source: 'initial', messages: detailedMessages.filter(Boolean) };
+  }
+
+  // Incremental sync
+  const historyRes = await gmail.users.history.list({
+    userId: 'me',
+    startHistoryId: user.lastSentHistoryId,
+    historyTypes: ['messageAdded'],
+  });
+
+  const history = historyRes.data.history || [];
+  const newMessages = history.flatMap((h) => h.messages || []);
+
+  const messagesToFetch = newMessages.filter(
+    (msg) => !user.syncedSentMessageIds.includes(msg.id)
+  );
+
+  const detailedMessages = await Promise.all(
+    messagesToFetch.map(async (msg) => {
+      const msgData = await gmail.users.messages.get({
+        userId: 'me',
+        id: msg.id,
+        format: 'full',
+      });
+      return await saveRepliedMessage(msg.id, msgData);
+    })
+  );
+
+  if (historyRes.data.historyId) {
+    user.lastSentHistoryId = historyRes.data.historyId;
+  }
+
+  await user.save();
+
+  return { source: 'incremental', messages: detailedMessages.filter(Boolean) };
+}
+
+
+
+
+export async function sendEmailViaGmail(senderEmail, to, subject, bodyText, attachments = []) {
+  // Find the user and set OAuth2 credentials
+  const user = await User.findOne({ email: senderEmail });
+  if (!user) throw new Error("Sender not found");
+
+  await setUserCredentials(user);
+  const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+
+  const boundary = "my-boundary-42";
   const mimeParts = [];
 
-  // Add plain text body part
+  // Format email body with your template
+  const formattedBody = `
+Dear Candidate,
+
+${bodyText}
+
+Best regards,
+HR Team
+`;
+
+  // Add plain text part
   mimeParts.push(
     `--${boundary}`,
     `Content-Type: text/plain; charset="UTF-8"`,
     `Content-Transfer-Encoding: 7bit`,
-    '',
-    bodyText
+    "",
+    formattedBody
   );
 
-  for (const file of attachments) {
-    console.log('Processing attachment:', file);
+  // Array to hold metadata of attachments for DB
+  const savedAttachments = [];
 
+  // Process each attachment
+  for (const file of attachments) {
     let fileContent;
+
     if (file.buffer) {
       fileContent = file.buffer;
     } else if (file.path) {
-      try {
-        // Resolve the path to absolute path
-        const resolvedPath = path.resolve(file.path);
-        console.log('Resolved attachment path:', resolvedPath);
-        fileContent = await fs.readFile(resolvedPath);
-      } catch (err) {
-        console.error('Error reading attachment file:', err);
-        throw new Error(`Attachment file content missing or unreadable for ${file.filename || file.originalname}`);
-      }
+      const resolvedPath = path.resolve(file.path);
+      fileContent = await fs.readFile(resolvedPath);
     } else {
       throw new Error(`No file content found for attachment: ${file.filename || file.originalname}`);
     }
 
-    const filename = file.originalname || file.filename || 'unknown';
-    const mimeType = mime.lookup(filename) || 'application/octet-stream';
-    const base64Content = fileContent.toString('base64');
+    const filename = file.originalname || file.filename || "unknown";
+    const mimeType = mime.lookup(filename) || "application/octet-stream";
+    const base64Content = fileContent.toString("base64");
 
     mimeParts.push(
       `--${boundary}`,
       `Content-Type: ${mimeType}; name="${filename}"`,
       `Content-Disposition: attachment; filename="${filename}"`,
       `Content-Transfer-Encoding: base64`,
-      '',
+      "",
       base64Content
     );
+
+    savedAttachments.push({
+      filename,
+      mimeType,
+      attachmentId: null, // You can update if you want to track attachment IDs
+    });
   }
 
+  // Close MIME boundary
   mimeParts.push(`--${boundary}--`);
 
+  // Build the raw message string
   const rawMessage = [
     `To: ${to}`,
     `From: ${senderEmail}`,
     `Subject: ${subject}`,
     `MIME-Version: 1.0`,
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
-    '',
+    "",
     ...mimeParts,
-  ].join('\r\n');
+  ].join("\r\n");
 
+  // Encode message for Gmail API (base64url)
   const encodedMessage = Buffer.from(rawMessage)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 
+  // Send the email via Gmail API
   const res = await gmail.users.messages.send({
-    userId: 'me',
+    userId: "me",
     requestBody: { raw: encodedMessage },
+  });
+
+  const gmailMessageId = res.data.id;
+  const gmailThreadId = res.data.threadId;
+
+  // Save sent email to your DB with new schema
+  await RepliedMessage.create({
+    accountEmail: senderEmail,
+    from: senderEmail,
+    to,
+    subject,
+    body: formattedBody,
+    messageId: gmailMessageId,
+    threadId: gmailThreadId,
+    direction: "sent",
+    attachments: savedAttachments,
+    sentAt: new Date(),
   });
 
   return res.data;
 }
 
-
-/**
- * Reply to an email in the same thread, with optional attachments.
- * @param {Object} options
- * @param {string} options.senderEmail - The logged-in user's email.
- * @param {string} options.recipientEmail - The recipient's email.
- * @param {string} options.subject - Email subject (e.g. "Re: ...").
- * @param {string} options.bodyText - The plain text message.
- * @param {string} options.replyToMessageId - Original Gmail messageId.
- * @param {string} options.threadId - Gmail threadId to continue.
- * @param {Array<{ filename: string, path: string }>} attachments - Multer-parsed attachments (optional).
- */
 export async function replyToEmailViaGmail({
   senderEmail,
   recipientEmail,
@@ -302,52 +449,75 @@ export async function replyToEmailViaGmail({
   attachments = [],
 }) {
   const user = await User.findOne({ email: senderEmail });
-  if (!user) throw new Error('Sender not found');
+  if (!user) throw new Error("Sender not found");
 
   await setUserCredentials(user);
-  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
-  // Get original message's Message-ID header
+  // Get original Message-ID header for threading
   const originalMessageIdHeader = await getMessageIdHeader(gmail, replyToMessageId);
   if (!originalMessageIdHeader) {
-    throw new Error('Original message Message-ID header not found');
+    throw new Error("Original message Message-ID header not found");
   }
 
-  const boundary = 'reply-boundary-42';
+  // Format email body with your template
+  const formattedBody = `
+Dear Candidate,
+
+${bodyText}
+
+Best regards,
+HR Team
+`.trim();
+
+  const boundary = "reply-boundary-42";
   const mimeParts = [];
 
-  // Plain text message part
+  // Add plain text part
   mimeParts.push(
     `--${boundary}`,
     `Content-Type: text/plain; charset="UTF-8"`,
     `Content-Transfer-Encoding: 7bit`,
-    '',
-    bodyText
+    "",
+    formattedBody
   );
 
+  // Process attachments
+  const savedAttachments = [];
   for (const file of attachments) {
-    // Use buffer if available, else read from disk path
-    const fileContent = file.buffer || (file.path ? await fs.readFile(file.path) : null);
-    if (!fileContent) {
+    let fileContent;
+    if (file.buffer) {
+      fileContent = file.buffer;
+    } else if (file.path) {
+      const resolvedPath = path.resolve(file.path);
+      fileContent = await fs.readFile(resolvedPath);
+    } else {
       throw new Error(`Attachment file content missing for ${file.originalname || file.filename}`);
     }
 
-    const filename = file.originalname || file.filename;
-    const mimeType = mime.lookup(filename) || 'application/octet-stream';
-    const base64Content = fileContent.toString('base64');
+    const filename = file.originalname || file.filename || "unknown";
+    const mimeType = mime.lookup(filename) || "application/octet-stream";
+    const base64Content = fileContent.toString("base64");
 
     mimeParts.push(
       `--${boundary}`,
       `Content-Type: ${mimeType}; name="${filename}"`,
       `Content-Disposition: attachment; filename="${filename}"`,
       `Content-Transfer-Encoding: base64`,
-      '',
+      "",
       base64Content
     );
+
+    savedAttachments.push({
+      filename,
+      mimeType,
+      attachmentId: null,
+    });
   }
 
   mimeParts.push(`--${boundary}--`);
 
+  // Build the raw MIME message string
   const rawMessage = [
     `To: ${recipientEmail}`,
     `From: ${senderEmail}`,
@@ -356,31 +526,45 @@ export async function replyToEmailViaGmail({
     `References: ${originalMessageIdHeader}`,
     `MIME-Version: 1.0`,
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
-    '',
+    "",
     ...mimeParts,
-  ].join('\r\n');
+  ].join("\r\n");
 
+  // Encode raw message in base64url format
   const encodedMessage = Buffer.from(rawMessage)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 
+  // Send reply via Gmail API
   const res = await gmail.users.messages.send({
-    userId: 'me',
+    userId: "me",
     requestBody: {
       raw: encodedMessage,
       threadId,
     },
   });
 
-  console.log("Reply sent. Gmail API response threadId:", res.data.threadId);
+  // Save sent reply in DB with new schema
+  await RepliedMessage.create({
+    accountEmail: senderEmail,
+    from: senderEmail,
+    to: recipientEmail,
+    subject,
+    body: formattedBody,
+    messageId: res.data.id,
+    threadId,
+    inReplyTo: originalMessageIdHeader,
+    direction: "sent",
+    attachments: savedAttachments,
+    sentAt: new Date(),
+  });
+
+  console.log("Reply sent and saved. Gmail threadId:", res.data.threadId);
 
   return res.data;
 }
-
-
-
 
 
 export async function sendVerificationEmailViaGmail({
