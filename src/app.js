@@ -10,17 +10,16 @@ import sessionMiddleware from './middleware/session.middleware.js';
 import calendarRoutes from './routes/calendar.route.js';
 import verificationRoutes from './routes/verification.route.js';
 import hrRoutes from './routes/hr.route.js';
-
-
-
-
+import resumeFilterRoutes from "./routes/resumeFilter.route.js";
 
 const app = express();
 
-app.use(cors({
-  origin: 'http://localhost:5173',  // your frontend origin
-  credentials: true,                // allow credentials (cookies)
-}));
+app.use(
+  cors({
+    origin: "http://localhost:5173", // your frontend origin
+    credentials: true, // allow credentials (cookies)
+  })
+);
 
 app.use(express.json());
 
@@ -31,23 +30,25 @@ app.get("/", (req, res) => {
   return res.status(200).json({ message: "Hello world from home" });
 });
 
-app.use('/', authRoutes);
+app.use("/", authRoutes);
 
 // Job routes
 app.use("/jobs", jobRoute);
 
 app.use("/api/resumes", resumeUploadRoutes);
 
-app.use('/messages', messagesRoute);
+app.use("/messages", messagesRoute);
 
-app.use('/applications', applicationRoute);
+app.use("/applications", applicationRoute);
 
-app.use('/schedules', scheduleRoute);
+app.use("/schedules", scheduleRoute);
 
-app.use('/calendar', calendarRoutes);
+app.use("/calendar", calendarRoutes);
 
-app.use('/verification', verificationRoutes);
+app.use("/verification", verificationRoutes);
 
 app.use('/hr', hrRoutes);
+
+app.use("/resume-filters", resumeFilterRoutes);
 
 export default app;

@@ -5,7 +5,6 @@ import Applicant from '../models/applicant.model.js';
 import Application from '../models/application.model.js'; // For status update
 import User from '../models/User.model.js';
 
-//place json here
 export async function startVerification(req, res) {
   try {
     const hrEmail = req.session?.userEmail;
