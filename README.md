@@ -44,7 +44,7 @@ The architecture follows a layered MVC-style structure for separation of concern
    `npm install`
 
 2. **Configure environment**  
-   Add keys and secrets to `.env`, including Mongo URI, Gmail API, and OpenAI keys.
+   Add keys and secrets to `.env`, including Mongo URI, Gmail API, and OpenAI keys. (Example Below)
 
 3. **Run the server**  
    `npm run dev` (starts on port 8080 by default)
@@ -83,3 +83,20 @@ Developed by:
 - Michi Chong  
 
 ---
+# MongoDB connection
+MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
+
+# Server port
+PORT=8080
+
+# Google OAuth
+GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_REDIRECT_URI=http://localhost:8080/auth/google/callback
+
+# Google reCAPTCHA
+RECAPTCHA_SECRET_KEY=your-recaptcha-secret-key
+
+# OpenAI API Key
+OPENAI_API_KEY=your-openai-api-key
+
