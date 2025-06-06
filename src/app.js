@@ -2,15 +2,16 @@ import express from "express";
 import cors from "cors";
 import jobRoute from "./routes/job.route.js";
 import resumeUploadRoutes from "./routes/resumeUpload.js";
-import authRoutes from './routes/auth.route.js';
-import messagesRoute from './routes/messages.route.js';
-import scheduleRoute from './routes/schedule.route.js';
-import applicationRoute from './routes/application.route.js';
-import sessionMiddleware from './middleware/session.middleware.js';
-import calendarRoutes from './routes/calendar.route.js';
-import verificationRoutes from './routes/verification.route.js';
-import hrRoutes from './routes/hr.route.js';
+import authRoutes from "./routes/auth.route.js";
+import messagesRoute from "./routes/messages.route.js";
+import scheduleRoute from "./routes/schedule.route.js";
+import applicationRoute from "./routes/application.route.js";
+import sessionMiddleware from "./middleware/session.middleware.js";
+import calendarRoutes from "./routes/calendar.route.js";
+import verificationRoutes from "./routes/verification.route.js";
+import hrRoutes from "./routes/hr.route.js";
 import resumeFilterRoutes from "./routes/resumeFilter.route.js";
+import openAIRoute from "./routes/openai.route.js";
 
 const app = express();
 
@@ -47,8 +48,10 @@ app.use("/calendar", calendarRoutes);
 
 app.use("/verification", verificationRoutes);
 
-app.use('/hr', hrRoutes);
+app.use("/hr", hrRoutes);
 
 app.use("/resume-filters", resumeFilterRoutes);
+
+app.use("/openai", openAIRoute);
 
 export default app;
