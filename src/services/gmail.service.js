@@ -5,6 +5,7 @@ import RepliedMessage from '../models/repliedMessage.model.js';
 import fs from 'fs/promises';
 import path from 'path';
 import mime from 'mime-types';
+import { enhanceEmailTone } from "./vertexHelper.js"
 
 // Constants and Configuration
 const EMAIL_TEMPLATE = `
@@ -435,7 +436,8 @@ export async function sendEmailViaGmail(senderEmail, to, subject, bodyText, atta
     if (!isValidEmail(email)) throw new Error(`Invalid recipient email: ${email}`);
   }
 
-  const formattedBody = formatEmailBody(bodyText);
+  const enhancedText = await enhanceEmailTone(bodyText);
+  const formattedBody = formatEmailBody(enhancedText);
   const { rawMessage, attachments: savedAttachments } = await buildMimeMessage({
     senderEmail,
     recipientEmail: recipients.join(", "),

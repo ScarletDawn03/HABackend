@@ -12,6 +12,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@google-cloud/vertexai": "^1.10.0",
     "axios": "^1.9.0",
     "cors": "^2.8.5",
     "cron": "^4.3.0",
